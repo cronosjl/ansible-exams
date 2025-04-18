@@ -1,0 +1,119 @@
+---
+- name: Installer dépendances Python et MySQL (Ubuntu/Debian)
+  apt:
+    name:
+      - python3-pip
+      - python3-dev
+      - default-libmysqlclient-dev
+      - build-essential
+    state: present
+    update_cache: yes
+  when: "'ubuntu' in ansible_facts['os_family']|lower"
+
+- name: Installer dépendances Python et MySQL (Rocky/CentOS)
+  dnf:
+    name:
+      - python3-pip
+      - python3-devel
+      - mysql-devel
+      - gcc
+    state: present
+    update_cache: yes
+  when: "'rocky' in ansible_facts['distribution']|lower"
+
+- name: Mise à jour des paquets
+  apt:
+    update_cache: yes
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Installer paquets nécessaires (Debian)
+  apt:
+    name:
+      - apache2
+      - php
+      - libapache2-mod-php
+      - php-mysql
+      - mariadb-server
+      - wget
+      - unzip
+    state: present
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Supprimer la page Apache par défaut
+  file:
+    path: /var/www/html/index.html
+    state: absent
+
+- name: Démarrer Apache
+  service:
+    name: apache2
+    state: started
+    enabled: yes
+
+- name: Démarrer MariaDB (sans systemd, cas conteneur)
+  shell: mysqld_safe --datadir=/var/lib/mysql &
+  async: 0
+  poll: 0
+  when: ansible_facts['system'] == "Linux" and ansible_facts['distribution'] == "Debian"
+
+- name: Attente du démarrage MariaDB
+  wait_for:
+    port: 3306
+    delay: 10
+
+# Créer un utilisateur adminsql avec tous les droits (via shell)
+- name: Créer un utilisateur adminsql avec accès root complet (en root via sudo mysql)
+  shell: |
+    mysql -u root -p{{ mariadb_root_password }} <<EOF
+    CREATE USER IF NOT EXISTS 'adminsql'@'localhost' IDENTIFIED BY '{{ mariadb_root_password }}';
+    GRANT ALL PRIVILEGES ON *.* TO 'adminsql'@'localhost' WITH GRANT OPTION;
+    FLUSH PRIVILEGES;
+    EOF
+  args:
+    executable: /bin/bash
+
+# Sécuriser MariaDB - mot de passe root
+- name: Sécuriser MariaDB - mot de passe root
+  mysql_user:
+    login_user: adminsql
+    login_password: "{{ mariadb_root_password }}"
+    name: root
+    host_all: yes
+    password: "{{ mariadb_root_password }}"
+    priv: '*.*:ALL,GRANT'
+    state: present
+  ignore_errors: true
+
+- name: Supprimer utilisateurs anonymes MariaDB
+  mysql_user:
+    login_user: adminsql
+    login_password: "{{ mariadb_root_password }}"
+    name: ''
+    host_all: yes
+    state: absent
+
+- name: Supprimer DB test MariaDB
+  mysql_db:
+    login_user: adminsql
+    login_password: "{{ mariadb_root_password }}"
+    name: test
+    state: absent
+
+- name: Création base WordPress
+  mysql_db:
+    login_user: adminsql
+    login_password: "{{ mariadb_root_password }}"
+    name: "{{ wordpress_db_name }}"
+    state: present
+
+- name: Création utilisateur WordPress
+  mysql_user:
+    login_user: adminsql
+    login_password: "{{ mariadb_root_password }}"
+    name: "{{ wordpress_db_user }}"
+    password: "{{ wordpress_db_password }}"
+    priv: "{{ wordpress_db_name }}.*:ALL"
+    host: localhost
+    state: present
+
+# ... autres tâches (wordpress, apache, etc.) ...

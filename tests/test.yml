@@ -1,0 +1,10 @@
+---
+- hosts: ubuntu
+  remote_user: root
+  roles:
+    - /root/config/wordpress-exams
+
+- hosts: rocky
+  remote_user: root
+  roles:
+    - /root/config/wordpress-exams

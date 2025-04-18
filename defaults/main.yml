@@ -1,0 +1,11 @@
+---
+# variables par défaut
+# Ce fichier contient les valeurs par défaut pour la configuration de ton rôle
+
+# Mot de passe root pour MariaDB
+mariadb_root_password: "admin"
+
+# Informations de la base de données WordPress
+wordpress_db_name: "wordpress"
+wordpress_db_user: "admin"
+wordpress_db_password: "admin"
